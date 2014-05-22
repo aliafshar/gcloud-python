@@ -54,7 +54,7 @@ class ApiProperty(object):
   {'name': 'banana'}
   """
 
-  def __init__(self, name, type):
+  def __init__(self, name, type=None):
     self.name = name
     self.type = type
 
@@ -64,7 +64,12 @@ class ApiProperty(object):
     # read the value of this property and fails.
     if not obj:
       return self.type()
-    return self.type(obj.raw.get(self.name))
+    # End nasty hack
+    raw = obj.to_dict().get(self.name)
+    if self.type and raw is not None:
+      return self.type(raw)
+    else:
+      return raw
 
   def __set__(self, obj, value):
     if hasattr(value, 'as_dict'):
@@ -147,7 +152,7 @@ class ApiResource(object):
   def from_dict(cls, connection, data):
     return cls(connection, **data)
 
-  def as_dict(self):
+  def to_dict(self):
     return self.raw
 
 
