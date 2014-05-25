@@ -1,6 +1,6 @@
 
 
-from gcloud.apiresrouces import ApiResource, ApiProperty
+from gcloud.apiresources import ApiResource, ApiProperty
 
 
 class Zone(ApiResource):
