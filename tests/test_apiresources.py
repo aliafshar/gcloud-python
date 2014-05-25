@@ -1,12 +1,13 @@
 
 import unittest2
 
-from gcloud.apiresources import ApiResource, ApiProperty
+from gcloud.apiresources import ApiResource, ApiProperty, ApiListProperty
 
 
 class Resource(ApiResource):
 
   name = ApiProperty('name', str)
+  tags = ApiListProperty('tags')
 
 
 class ResourceTest(unittest2.TestCase):

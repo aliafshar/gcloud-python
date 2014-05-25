@@ -54,9 +54,9 @@ class ApiProperty(object):
   {'name': 'banana'}
   """
 
-  def __init__(self, name, type=None):
+  def __init__(self, name, as_type=None):
     self.name = name
-    self.type = type
+    self.as_type = as_type
 
   def __get__(self, obj, type=None):
     # This nasty hack is here to allow sphinx to auto-generate documentation
@@ -66,15 +66,15 @@ class ApiProperty(object):
       return self.type()
     # End nasty hack
     raw = obj.to_dict().get(self.name)
-    if self.type and raw is not None:
-      return self.type(raw)
+    if self.as_type and raw is not None:
+      return self.as_type(raw)
     else:
       return raw
 
   def __set__(self, obj, value):
     if hasattr(value, 'as_dict'):
       value = value.as_dict()
-    obj.raw[self.name] = value
+    obj.to_dict()[self.name] = value
 
 
 class ApiListProperty(object):
@@ -83,6 +83,9 @@ class ApiListProperty(object):
   Note: this descriptor is only suitable for lists of data that are embedded in
   responses rather than those that are linked as collections.
   """
+  def __init__(self, name, as_type=None):
+    self.name = name
+    self.as_type = as_type
 
   def __get__(self, obj, type=None):
     return list(self._list_items(obj))
@@ -125,23 +128,35 @@ class ApiResource(object):
   'banana'
   """
 
+  #: The connection context of this resource. May be None.  It is recommended to
+  #: call :func:`ApiResource.get_connection` instead which will look up the
+  #: closest connection in the parent heirarchy.
   _connection = None
 
-  def __init__(self, parent=None, connection=None, **kw):
-    self.raw = {}
-    self.raw.update(kw)
-    self.parent = parent
+  #: The raw dict representation of this resource from which proprties are
+  #: accessed and set.
+  _raw = None
 
-  id = ApiProperty('id', str)
+  #: The parent resource. May be None for unparented resources or root
+  #: resrouces.
+  _parent = None
+
+  def __init__(self, parent=None, connection=None, **kw):
+    self._raw = {}
+    self._raw.update(kw)
+    self._connection = connection
+    self._parent = parent
 
   def __str__(self):
     return '<{}:{}>'.format(self.__class__.__name__, self.name)
 
   def get_connection(self):
-    if self.parent:
-      return self.parent.connection
-    else:
+    if self._connection:
       return self._connection
+    elif self._parent:
+      return self._parent.get_connection()
+    else:
+      return None
 
   def set_connection(self, value):
     self._connection = value
@@ -149,11 +164,21 @@ class ApiResource(object):
   connection = property(get_connection, set_connection)
 
   @classmethod
-  def from_dict(cls, connection, data):
-    return cls(connection, **data)
+  def from_dict(cls, data, parent=None, connection=None):
+    resource = cls(parent=parent, connection=connection)
+    resource._raw.update(data)
+    return resource
 
   def to_dict(self):
-    return self.raw
+    return self._raw
+
+  def get_parent(self):
+    return self._parent
+
+  def set_parent(self, parent):
+    self._parent = parent
+
+  parent = property(get_parent, set_parent)
 
 
 def get_or_create_instance(value, as_type):
