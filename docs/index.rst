@@ -5,6 +5,7 @@
 
   datastore-api
   storage-api
+  dns-api
   common-api
 
 Google Cloud Python API

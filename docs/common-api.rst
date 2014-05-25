@@ -16,3 +16,11 @@ Credentials
   :members:
   :undoc-members:
   :show-inheritance:
+
+API Resources
+-------------
+
+.. automodule:: gcloud.apiresources
+  :members:
+  :undoc-members:
+  :show-inheritance:
