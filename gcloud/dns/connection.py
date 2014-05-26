@@ -1,4 +1,4 @@
-
+from functools import partial
 
 from gcloud.apiresources import get_or_create_instance, get_attr_or_string
 from gcloud.connection import ApiClientConnection
@@ -9,7 +9,16 @@ from gcloud.dns.resources import Zone, Record, Change
 
 
 class Connection(ApiClientConnection):
-  """Connection to Google Cloud DNS API."""
+  """Connection to Google Cloud DNS API via the JSON REST API.
+
+  Note:
+
+  * The connection can perform all the tasks of the API. The rest of the library
+  contains shortcut methods that call methods on the connection.
+
+  * A connection is bound to a single project, so this should be passed in on
+  instantiation
+  """
 
   API_NAME = 'dns'
   API_VERSION = 'v1beta1'
@@ -19,33 +28,37 @@ class Connection(ApiClientConnection):
     super(Connection, self).__init__(credentials=credentials)
 
   def list_zones(self):
-    """Iterates over the zones in this project."""
-    return MethodIterator(
-        connection=self,
-        request_method=self.service.managedZones().list,
-        request_args={'project': self.project},
-        as_type=Zone,
+    """Iterates over the zones in this project.
+
+    >>> for zone in connection.list_zones():
+    ...   print zone
+    ...
+    <Zone:...>
+    <Zone:...>
+
+    :rtype: Iterable of :class:`gcloud.dns.resources.Zone`
+    :returns: The zones in this project.
+    """
+    return self._get_iterator(
+        self.service.managedZones().list,
+        self._get_args(),
+        Zone,
         items_key='managedZones'
     )
 
-  def create_zone(self, zone=None, name=None, dns_name=None, description=None):
-    """Creates a managed zone.
+  def create_zone_instance(self, zone):
+    """Creates a managed zone from a zone instance.
 
-    >>> c.create_zone(name='myzone', dns_name='example.com.')
-    >>> <Zone:...>
+    >>> z = Zone(name='myzone', dns_name='example.com.', 'My example zone.')
+    >>> c.create_zone_instance(z)
 
-    or if you already have a zone instance,
+    :type zone: :class:`gcloud.dns.resources.Zone`
+    :param zone: The zone to create.
 
-    >>> z = Zone(name='myzone', dns_name='example.com.')
-    >>> c.create_zone(zone=z)
+    :rtype: :class:`gcloud.dns.resource.Zone`
+    :returns: The newly created zone. Note: this will not be the same instance
+              as passed.
     """
-    zone = get_or_create_instance(zone, Zone)
-    if name:
-      zone.name = name
-    if dns_name:
-      zone.dns_name = dns_name
-    if description:
-      zone.description = description
     #: Throws ValueError if zone is missing information
     zone.validate_for_create()
     response = self.service.managedZones().create(
@@ -53,87 +66,155 @@ class Connection(ApiClientConnection):
         project=self.project).execute()
     return Zone.from_dict(response, connection=self)
 
-  def delete_zone(self, zone, project_id=None):
+  def create_zone(self, name, dns_name, description):
+    """Creates a managed zone.
+
+    >>> c.create_zone('myzone', 'example.com.', 'My example zone.')
+    >>> <Zone:...>
+
+    If you already have a zone instance, use
+    :meth:`gcloud.dns.resources.Zone.create`.
+
+    :type dns_name: string
+    :param dns_name: The compete DNS name of the zone, e.g. `aliafshar.org.`
+
+    :type description: string
+    :param description: A freeform description of the zone.
+
+    :rtype: class:`gcloud.dns.resource.Zone`
+    :returns: The newly created Zone.
+    """
+    zone = Zone(connection=self, name=name, dns_name=dns_name,
+        description=description)
+    return self.create_zone_instance(zone)
+
+  def delete_zone(self, zone):
     """Deletes a manages zone.
 
-    :param zone:
-    :ptype zone:
+    :type zone: :class:`gcloud.dns.resources.Zone` or string
+    :param zone: The zone or the name of the zone to delete.
     """
     zone = get_attr_or_string(zone, 'name')
-    args = self._default_args(managedZone=zone, project=project_id)
-    self.svc.managedZones().delete(**args).execute()
+    self.svc.managedZones().delete(
+        project=self.project, managedZone=zone).execute()
 
   def get_zone(self, zone, project_id=None):
+    """Fetches a manages zone.
+
+    :type zone: :class:`gcloud.dns.resource.Zone` or string
+    :param zone: The zone or the name of the zone to fetch.
+
+    :rtype: class:`gcloud.dns.resource.Zone`
+    :returns: The fetched Zone.
+    """
     zone = get_attr_or_string(zone, 'name')
-    args = self._default_args(managedZone=zone, project=project_id)
-    response = self.svc.managedZones().get(**args).execute()
+    response = self.svc.managedZones().get(
+        **self._get_args(managedZone=zone)).execute()
     return Zone.from_dict(self.connection, response)
 
-  def list_records(self, zone, type=None, name=None, project=None):
+  def list_records(self, zone, type=None, name=None):
+    """Lists all the records in a zone.
+
+    >>> for record in connection.list_records('my-zone'):
+    ...   print record
+    ...
+    <Record:...>
+    <Record:...>
+
+    :type zone: :class:`gcloud.dns.resources.Zone` or string
+    :param zone: The zone or the name of the zone to fetch.
+
+    :type type: string
+    :param type: the type of record to return
+
+    :type name: string
+    :param name:
+
+    :rtype: Iterable of :class:`gcloud.dns.resources.Record`
+    :returns: The records in this zone.
+    """
     zone = get_attr_or_string(zone, 'name')
     return self._iterator_for(
         self.svc.resourceRecordSets().list,
-        {'type': type, 'name': name, 'managedZone': zone},
-        Record,
+        self._get_args(type=type, name=name, managedZone = zone),
+        partial(Record, parent=Zone(connection=self, name=zone)),
         items_key='rrsets',
     )
 
-  def apply_change(self, zone, change, project_id=None):
-    args = self._default_args(managedZone=zone, project=project_id)
-    response = self.svc.changes().create(
-        body=change.as_dict(), **args).execute()
-    return self._construct(Change, response)
+  def apply_change(self, zone, change):
+    """Applies a change to a zone.
 
-  def add_record(self, zone, name=None, type=None, ttl=None, data=None,
-      record=None, project_id=None):
+    Normally you do not need to manually apply a change. You can use the
+    shortcuts :meth:`gcloud.dns.Connection.add_record`,
+    :meth:`gcloud.dns.Connection.add_records`,
+    :meth:`gcloud.dns.Connection.delete_record`,
+    :meth:`gcloud.dns.Connection.update_record`.
+
+    :type zone: :class:`gcloud.dns.Zone` or string
+    :param zone: The zone or the name of the zone to fetch.
+
+    :type change: :class:`gcloud.dns.Change`
+    :param change: The change to apply.
+    """
     zone = get_attr_or_string(zone, 'name')
-    record = get_or_create_instance(record, Record)
-    if name:
-      record.name = name
-    if type:
-      record.type = type
-    if ttl:
-      record.ttl = ttl
+    response = self.svc.changes().create(body=change.as_dict(),
+        project=self.project, managedZone=zone).execute()
+    return Change.fromDict(response, connection=self)
+
+  def add_record(self, zone, name, type, ttl, data=None):
+    """Adds a record to the given zone.
+
+    >>> connection.add_record('my-zone', 'aliafshar.org.', 'A', 60, '1.2.3.4')
+    <Change:...>
+
+    :type zone: :class:`gcloud.dns.Zone` or string
+    :param zone: The zone or the name of the zone to fetch.
+    :type name: string
+    :param name: The name of the record to add.
+    :type name: string
+    :param name: The name of the record to add.
+    :rtype: :class:`gcloud.dns.Change`
+    :returns: The change for the additon.
+    """
+    zone = get_attr_or_string(zone, 'name')
+    record = Record(name=name, type=type, ttl=ttl)
     if data:
       record.data = data
-    change = self._construct(Change)
+    change = Change()
     change.add(record)
-    return self.apply_change(zone, change, project_id)
+    return self.apply_change(zone, change)
 
-  def add_records(self, zone, records, project_id=None):
+  def add_records(self, zone, records):
+    """Adds a number of records to a zone.
+
+    :type zone: :class:`gcloud.dns.Zone` or string
+    :param zone: The zone or the name of the zone to fetch.
+    :type records: Iterable of :class:`gcloud.dns.Record`
+    :param records: The records to add to this zone.
+    """
     zone = get_attr_or_string(zone, 'name')
     change = self._construct(Change)
     for record in records:
       change.add(record)
-    return self.apply_change(zone, change, project_id)
+    return self.apply_change(zone, change)
 
-  def delete_record(self, zone, record, project_id=None):
+  def delete_record(self, zone, record):
     zone = get_attr_or_string(zone, 'name')
     if not isinstance(record, Record):
       raise TypeError('record must be a Record')
     change = self._construct(Change)
     change.delete(record)
-    return self.apply_change(zone, change, project_id)
+    return self.apply_change(zone, change)
 
-  def update_record(self, zone, record, project_id=None):
+  def update_record(self, zone, record):
     zone = get_attr_or_string(zone, 'name')
     if not isinstance(record, Record):
       raise TypeError('record must be a Record')
     change = self._construct(Change)
     change.update(record)
-    return self.apply_change(zone, change, project_id)
+    return self.apply_change(zone, change)
 
-  def _get_project_or_default_project(self, project):
-    if isinstance(Project, project):
-      return project
-    elif project:
-      return Project(connection=self, name=project)
-    elif self.project:
-      return Project(connection=self, name=self.project)
-    raise ValueError('Connection must have a project, or project must be '
-                     'passed explicitly.')
-
-  def _default_args(self, **kw):
+  def _get_args(self, **kw):
     args = {}
     args.update({'project': self.project})
     for k, v in kw.items():
@@ -141,6 +222,14 @@ class Connection(ApiClientConnection):
         args[k] = v
     return args
 
-  def _iterator_for(self, method, args, as_type, **kw):
-    return MethodIterator(self, method, request_args=self._default_args(**args),
-        as_type=as_type, **kw)
+  def _get_iterator(self, method, args, as_type, parent=None, **kwargs):
+    """Utility method to ease creating iterators bound to this connection."""
+    if parent:
+      as_type = partial(as_type, parent=parent)
+    return MethodIterator(
+        connection=self,
+        request_method=method,
+        request_args=args,
+        as_type=as_type,
+        **kwargs)
+
