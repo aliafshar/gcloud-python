@@ -167,7 +167,7 @@ class Connection(ApiClientConnection):
     >>> connection.add_record('my-zone', 'aliafshar.org.', 'A', 60, '1.2.3.4')
     <Change:...>
 
-    :type zone: :class:`gcloud.dns.Zone` or string
+    :type zone: :class:`gcloud.dns.resources.Zone` or string
     :param zone: The zone or the name of the zone to fetch.
     :type name: string
     :param name: The name of the record to add.
@@ -207,23 +207,40 @@ class Connection(ApiClientConnection):
     return self.apply_change(zone, change)
 
   def update_record(self, zone, record):
+    """Updates a record for a zone.
+
+    This method uses the internally stored state on a record to create a
+    suitable change and apply it.
+
+    :type zone: :class:`gcloud.dns.resources.Zone` or string
+    :param zone: The zone or the name of the zone to fetch.
+    :type record: :class:`gcloud.dns.resrouces.Record`
+    :param record: The record to update.
+
+    >>> for record in connection.list_records('my-test-zone'):
+    ...   record.ttl = 100
+    ...   connection.update_record('my-test-zone', record)
+    """
     zone = get_attr_or_string(zone, 'name')
     if not isinstance(record, Record):
-      raise TypeError('record must be a Record')
-    change = self._construct(Change)
+      raise TypeError('record parameter must be a Record.')
+    change = Change()
     change.update(record)
     return self.apply_change(zone, change)
 
-  def _get_args(self, **kw):
+  def _get_args(self, **kwargs):
+    """Utility method to create request arguments that include the project."""
     args = {}
     args.update({'project': self.project})
-    for k, v in kw.items():
+    for k, v in kwargs.items():
+      # Only set arguments that have a non-None value.
       if v is not None:
         args[k] = v
     return args
 
   def _get_iterator(self, method, args, as_type, parent=None, **kwargs):
     """Utility method to ease creating iterators bound to this connection."""
+    # If there is a parent, bind it to the constructor.
     if parent:
       as_type = partial(as_type, parent=parent)
     return MethodIterator(
