@@ -17,7 +17,12 @@ class Connection(ApiClientConnection):
   contains shortcut methods that call methods on the connection.
 
   * A connection is bound to a single project, so this should be passed in on
-  instantiation
+  instantiation. Since all API methods in the Cloud DNS API are scoped to a
+  single project, this library expects it up front. If you want to use a
+  different project, simply create a new connection scoped to the new project.
+
+  * This class is iterable, and produces the zones contained in the project on
+  iteration.
   """
 
   API_NAME = 'dns'
@@ -45,6 +50,15 @@ class Connection(ApiClientConnection):
         Zone,
         items_key='managedZones'
     )
+
+  def __iter__(self):
+    """Iterates over the zones in this project.
+
+    This is just a shortcut to
+    :meth:`gcloud.dns.connection.Connection.list_zones`.
+    """
+    return self.list_zones()
+
 
   def create_zone_instance(self, zone):
     """Creates a managed zone from a zone instance.
