@@ -59,7 +59,6 @@ class Connection(ApiClientConnection):
     """
     return self.list_zones()
 
-
   def create_zone_instance(self, zone):
     """Creates a managed zone from a zone instance.
 
@@ -103,7 +102,7 @@ class Connection(ApiClientConnection):
     return self.create_zone_instance(zone)
 
   def delete_zone(self, zone):
-    """Deletes a manages zone.
+    """Deletes a managed zone.
 
     :type zone: :class:`gcloud.dns.resources.Zone` or string
     :param zone: The zone or the name of the zone to delete.
@@ -112,7 +111,7 @@ class Connection(ApiClientConnection):
     self.svc.managedZones().delete(
         project=self.project, managedZone=zone).execute()
 
-  def get_zone(self, zone, project_id=None):
+  def get_zone(self, zone):
     """Fetches a manages zone.
 
     :type zone: :class:`gcloud.dns.resource.Zone` or string
@@ -159,15 +158,14 @@ class Connection(ApiClientConnection):
     """Applies a change to a zone.
 
     Normally you do not need to manually apply a change. You can use the
-    shortcuts :meth:`gcloud.dns.Connection.add_record`,
-    :meth:`gcloud.dns.Connection.add_records`,
-    :meth:`gcloud.dns.Connection.delete_record`,
-    :meth:`gcloud.dns.Connection.update_record`.
+    shortcuts :meth:`gcloud.dns.connection.Connection.add_record`,
+    :meth:`gcloud.dns.connection.Connection.add_records`,
+    :meth:`gcloud.dns.connection.Connection.delete_record`,
+    :meth:`gcloud.dns.connection.Connection.update_record`.
 
-    :type zone: :class:`gcloud.dns.Zone` or string
+    :type zone: :class:`gcloud.dns.resource.Zone` or string
     :param zone: The zone or the name of the zone to fetch.
-
-    :type change: :class:`gcloud.dns.Change`
+    :type change: :class:`gcloud.dns.resource.Change`
     :param change: The change to apply.
     """
     zone = get_attr_or_string(zone, 'name')
@@ -201,9 +199,9 @@ class Connection(ApiClientConnection):
   def add_records(self, zone, records):
     """Adds a number of records to a zone.
 
-    :type zone: :class:`gcloud.dns.Zone` or string
+    :type zone: :class:`gcloud.dns.resources.Zone` or string
     :param zone: The zone or the name of the zone to fetch.
-    :type records: Iterable of :class:`gcloud.dns.Record`
+    :type records: Iterable of :class:`gcloud.dns.resources.Record`
     :param records: The records to add to this zone.
     """
     zone = get_attr_or_string(zone, 'name')
@@ -213,6 +211,13 @@ class Connection(ApiClientConnection):
     return self.apply_change(zone, change)
 
   def delete_record(self, zone, record):
+    """Deletes a record from a zone.
+
+    :type zone: :class:`gcloud.dns.resource.Zone` or string
+    :param zone: The zone or the name of the zone.
+    :type record: :class:`gcloud.dns.resources.Record`
+    :param record: The record to delete.
+    """
     zone = get_attr_or_string(zone, 'name')
     if not isinstance(record, Record):
       raise TypeError('record must be a Record')

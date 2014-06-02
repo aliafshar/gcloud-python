@@ -62,8 +62,9 @@ class ApiProperty(object):
     # This nasty hack is here to allow sphinx to auto-generate documentation
     # without explicitly marking all properties as "novalue". Sphinx attemtps to
     # read the value of this property and fails.
+    print [obj]
     if not obj:
-      return self.type()
+      return ''
     # End nasty hack
     raw = obj.to_dict().get(self.name)
     if self.as_type and raw is not None:
